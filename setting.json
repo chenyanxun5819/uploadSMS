@@ -1,0 +1,9 @@
+{
+  "event": {
+    "date": "2024-11-24",
+    "code": "ACA CMO183",
+    "name": "Malaysian Physics Olympiad (OFM) 2025"
+  },
+  "student_fields": ["class", "student_id", "name", "award"],
+  "students": []
+}
