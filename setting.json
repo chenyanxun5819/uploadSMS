@@ -4,6 +4,6 @@
     "code": "ACA CMO183",
     "name": "Malaysian Physics Olympiad (OFM) 2025"
   },
-  "student_fields": ["class", "student_id", "name", "award"],
+"student_fields": ["name", "class", "studentId", "award"],
   "students": []
 }

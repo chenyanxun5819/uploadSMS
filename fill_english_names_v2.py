@@ -18,6 +18,7 @@
   HEADLESS=1  # 無頭模式
 """
 import os
+import json
 import time
 import sys
 from collections import defaultdict
@@ -38,6 +39,61 @@ from webdriver_manager.chrome import ChromeDriverManager
 SMS_LOGIN = "http://sms.chhsban.edu.my/sms/index.php?r=site/login"
 SMS_ACTIVITY_PAGE = "http://sms.chhsban.edu.my/sms/index.php?r=transaction/studentPerformance/create"
 EXCEL_FILE = os.path.join(os.path.dirname(__file__), "Upload.xlsx")
+SETTING_FILE = os.path.join(os.path.dirname(__file__), "setting.json")
+
+
+def load_field_mapping():
+    """從 Excel 第 4 行讀取欄位名稱，返回 {field_name: column_index}"""
+    try:
+        excel_file = EXCEL_FILE
+        if not os.path.exists(excel_file):
+            print(f'⚠ 找不到 Excel，嘗試從 setting.json 讀取...')
+            raise FileNotFoundError('Excel not found')
+        
+        # 優先從 Excel 第 4 行讀取標題
+        wb = load_workbook(excel_file, data_only=False)
+        ws = wb.active
+        
+        mapping = {}
+        for col_idx in range(1, ws.max_column + 1):
+            cell_value = ws.cell(row=4, column=col_idx).value
+            if cell_value:
+                field_name = str(cell_value).strip().lower()
+                mapping[field_name] = col_idx
+                print(f'    [欄位] 第 {col_idx} 列: {field_name}')
+        
+        if mapping:
+            print(f'  ✓ 從 Excel 第 4 行讀取欄位對應: {mapping}')
+            wb.close()
+            return mapping
+        else:
+            print(f'⚠ Excel 第 4 行為空，嘗試從 setting.json 讀取...')
+            wb.close()
+            raise ValueError('Row 4 is empty')
+    
+    except Exception as e:
+        print(f'  ⚠ 無法從 Excel 讀取欄位，轉用 setting.json: {e}')
+        try:
+            if os.path.exists(SETTING_FILE):
+                with open(SETTING_FILE, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    fields = data.get('student_fields', [])
+                    mapping = {}
+                    for i, field in enumerate(fields):
+                        mapping[field.lower()] = i + 1  # Excel 欄位從 1 開始（A=1, B=2...）
+                    print(f'  ✓ 從 setting.json 讀取欄位對應: {mapping}')
+                    return mapping
+        except Exception as e2:
+            print(f'  ⚠ 無法讀取 setting.json: {e2}')
+    
+    # 預設欄位順序（若都讀取失敗）
+    print(f'  ⚠ 使用預設欄位順序')
+    return {
+        'class': 1,
+        'studentid': 2,
+        'name': 3,
+        'award': 4
+    }
 
 
 def setup_driver(headless: bool = False):
@@ -266,6 +322,10 @@ def main():
 
     headless = bool(os.getenv('HEADLESS'))
 
+    # 讀取欄位對應
+    print('[0/6] 讀取設定和 Excel 資料...')
+    field_map = load_field_mapping()
+    
     # 讀取 Excel
     print('[0/6] 讀取 Excel 資料...')
     wb = load_workbook(EXCEL_FILE)
@@ -293,13 +353,18 @@ def main():
     print(f'  日期: {date_str}, 活動: {activity_code}')
 
     # 讀取學生清單（Row 5+）
-    # Row 4 是標題: class, studentId, name, award
+    # Row 4 是標題列
     students_by_class = defaultdict(list)  # class_short -> [(row_idx, student_id), ...]
     seen_pairs = set()  # 用來去重：(class, student_id)
 
+    class_col = field_map.get('class', field_map.get('Class', 1))
+    student_id_col = field_map.get('studentid', field_map.get('studentId', field_map.get('student_id', 2)))
+    
+    print(f'  班級欄: {class_col}, 學號欄: {student_id_col}')
+
     for row_idx in range(5, ws.max_row + 1):
-        class_val = ws.cell(row=row_idx, column=1).value  # A: class
-        id_val = ws.cell(row=row_idx, column=2).value      # B: studentId
+        class_val = ws.cell(row=row_idx, column=class_col).value
+        id_val = ws.cell(row=row_idx, column=student_id_col).value
 
         if not id_val:
             continue
@@ -371,8 +436,9 @@ def main():
                         time.sleep(0.8)  # 延長延遲，讓 JavaScript 完成
                         print(f'      已添加到名單')
                         
-                        # 寫入 Excel
-                        ws.cell(row=row_idx, column=5, value=name_en)  # E 欄
+                        # 寫入 Excel（英文名稱放在最後一個欄位之後）
+                        english_name_col = max(field_map.values()) + 1
+                        ws.cell(row=row_idx, column=english_name_col, value=name_en)
                         found_count += 1
                     except Exception as e:
                         print(f'      ⚠ 點擊按鈕失敗: {e}')
@@ -434,9 +500,11 @@ def main():
                     # 在 Excel 中查找相同學號的行
                     excel_remark = None
                     for row_idx in range(5, ws.max_row + 1):
-                        excel_student_id = ws.cell(row=row_idx, column=2).value  # B 欄
+                        excel_student_id = ws.cell(row=row_idx, column=student_id_col).value
                         if str(excel_student_id).strip() == student_no_from_page:
-                            excel_remark = ws.cell(row=row_idx, column=4).value or ""  # D 欄
+                            # 備註欄位是 'award' 欄位
+                            award_col = field_map.get('award', field_map.get('Award', 4))
+                            excel_remark = ws.cell(row=row_idx, column=award_col).value or ""
                             print(f'    ✓ 匹配到 Excel 行 {row_idx}，備註: {excel_remark}')
                             break
                     
@@ -486,10 +554,6 @@ def main():
 
         # [6/6] 點擊「創建」按鈕
         print('\n[6/6] 提交表單...')
-        print('  ⏸ 暫停中... 請檢查頁面狀態')
-        print('  ⏸ 完成檢查後，按 Enter 繼續提交')
-        input()
-        
         try:
             submit_btn = WebDriverWait(driver, 8).until(
                 EC.element_to_be_clickable((By.ID, 'yw7'))
@@ -500,15 +564,11 @@ def main():
         except Exception as e:
             print(f'⚠ 提交失敗: {e}')
 
-        # 儲存 Excel
-        print(f'\n儲存 Excel...')
-        wb.save(EXCEL_FILE)
-        print('✓ 已儲存')
-
         # 統計
         print(f'\n完成')
         print(f'  成功填寫並提交: {found_count}')
         print(f'  未找到: {missing_count}')
+        print(f'\n✓ 流程結束，請在瀏覽器中檢查結果')
         
         # 保留瀏覽器窗口
         print('\n浏览器已保持打开。按 Enter 退出...')
