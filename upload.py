@@ -316,9 +316,15 @@ def main():
         print(f'✗ 找不到 Excel: {EXCEL_FILE}')
         return
 
-    # 帳號密碼（寫死）
-    username = 'schhs334'
-    password = 'schhs334'
+    # 从设定页面读取帐号密码（已加密存储）
+    from core.config_manager import ConfigManager
+    config = ConfigManager()
+    username, password = config.get_credentials()
+    
+    if not username or not password:
+        print('✗ 未找到保存的凭证')
+        print('   请先在设定页面输入并保存 SMS 帐号和密码')
+        return
 
     headless = bool(os.getenv('HEADLESS'))
 
@@ -332,8 +338,8 @@ def main():
     ws = wb.active
 
     # 讀取事件資訊
-    date_val = ws['A1'].value
-    activity_code = ws['A2'].value
+    date_val = ws['B1'].value
+    activity_code = 'ACA CMO207'
 
     if not date_val or not activity_code:
         print('✗ Excel A1 或 A2 為空')
