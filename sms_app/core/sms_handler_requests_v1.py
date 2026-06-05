@@ -217,7 +217,8 @@ class SMSHandlerRequests:
                 class_name = ws.cell(row=row_idx, column=2).value
                 student_id = ws.cell(row=row_idx, column=3).value
                 name = ws.cell(row=row_idx, column=1).value
-                award = ws.cell(row=row_idx, column=4).value
+                category = ws.cell(row=row_idx, column=4).value
+                award = ws.cell(row=row_idx, column=5).value
                 
                 if not student_id or not class_name:
                     continue
@@ -229,7 +230,8 @@ class SMSHandlerRequests:
                     'row_idx': row_idx,
                     'student_id': str(student_id),
                     'name': name,
-                    'award': award or ''
+                    'award': award or '',
+                    'category': category or ''
                 })
             
             print(f"    读取完成: {sum(len(v) for v in students_by_class.values())} 个学生")
@@ -352,9 +354,26 @@ class SMSHandlerRequests:
                     sms_student = sms_student_map[student_id]
                     internal_id = sms_student['internal_id']
                     
+                    # Determine type_of_bonus from category
+                    category = student.get('category', '')
+                    def _map_category(cat):
+                        try:
+                            if not cat:
+                                return '1'
+                            s = str(cat)
+                            if '特殊' in s:
+                                return '2'
+                            if '校外' in s:
+                                return '1'
+                            return '1'
+                        except Exception:
+                            return '1'
+
+                    type_val = _map_category(category)
+
                     # 添加该学生的表单字段
                     post_data[f'StudentPerformanceM[inputperformance][{internal_id}][class_id]'] = sms_student['class_id']
-                    post_data[f'StudentPerformanceM[inputperformance][{internal_id}][type_of_bonus]'] = '1'  # 校外学艺
+                    post_data[f'StudentPerformanceM[inputperformance][{internal_id}][type_of_bonus]'] = type_val
                     post_data[f'StudentPerformanceM[inputperformance][{internal_id}][mark]'] = '0.00'
                     post_data[f'StudentPerformanceM[inputperformance][{internal_id}][remark]'] = str(award)
                     

@@ -18,12 +18,20 @@ from core.startup_checker import StartupChecker
 def main():
     app = QApplication(sys.argv)
     
-    # 设置应用样式
-    app_dir = Path(__file__).parent
-    styles_path = app_dir / "ui" / "styles.qss"
+    # 设置应用样式 - 兼容 PyInstaller 打包环境
+    if getattr(sys, 'frozen', False):
+        # PyInstaller 环境
+        app_dir = Path(sys._MEIPASS) / 'ui'
+    else:
+        # 开发环境
+        app_dir = Path(__file__).parent / 'ui'
+    
+    styles_path = app_dir / 'styles.qss'
     if styles_path.exists():
-        with open(styles_path, "r", encoding="utf-8") as f:
+        with open(styles_path, 'r', encoding='utf-8') as f:
             app.setStyleSheet(f.read())
+    else:
+        print(f" 警告: 样式文件未找到: {styles_path}")
     
     # 创建主窗口并最大化显示（保留窗口控制）
     window = MainWindow()

@@ -82,8 +82,9 @@ class UploadThread(QThread):
                     'name': ws.cell(row=row_num, column=1).value,      # Column 1: 姓名
                     'class': ws.cell(row=row_num, column=2).value,     # Column 2: 班级
                     'student_id': student_id,                          # Column 3: 学号
-                    'remarks': ws.cell(row=row_num, column=4).value,   # Column 4: 奖项/备注
-                    'english_name': ws.cell(row=row_num, column=5).value, # Column 5: 英文名
+                    'category': ws.cell(row=row_num, column=4).value,  # Column 4: 类别
+                    'remarks': ws.cell(row=row_num, column=5).value,   # Column 5: 奖项/备注
+                    'english_name': ws.cell(row=row_num, column=6).value, # Column 6: 英文名
                 }
                 
                 # 如果至少有学号和班级，则视为有效行
@@ -210,8 +211,8 @@ class ScoreUploadPage:
         layout.addWidget(preview_label)
         
         self.preview_table = QTableWidget()
-        self.preview_table.setColumnCount(5)
-        self.preview_table.setHorizontalHeaderLabels(["班级", "学号", "姓名", "备注", "英文名"])
+        self.preview_table.setColumnCount(6)
+        self.preview_table.setHorizontalHeaderLabels(["班级", "学号", "姓名", "类别", "备注", "英文名"])
         self.preview_table.setMaximumHeight(150)
         layout.addWidget(self.preview_table)
         
@@ -269,24 +270,24 @@ class ScoreUploadPage:
             
             # 读取第4行作为标题（如果存在）
             headers = []
-            for col in range(1, 6):
+            for col in range(1, 7):
                 cell_value = ws.cell(row=4, column=col).value
                 if cell_value:
                     headers.append(str(cell_value))
-            
+
             if headers:
                 self.preview_table.setColumnCount(len(headers))
                 self.preview_table.setHorizontalHeaderLabels(headers)
-            
+
             # 读取数据行（从第5行开始）
             row_idx = 0
             for excel_row in range(5, min(ws.max_row + 1, 25)):  # 最多显示20行
                 col_idx = 0
                 row_data = []
-                for col in range(1, 6):
+                for col in range(1, 7):
                     cell = ws.cell(row=excel_row, column=col)
                     row_data.append(str(cell.value) if cell.value else "")
-                
+
                 if any(row_data):  # 如果该行不为空
                     self.preview_table.insertRow(row_idx)
                     for i, data in enumerate(row_data):
@@ -302,39 +303,46 @@ class ScoreUploadPage:
         """下载模板"""
         try:
             import sys
-            
-            # 确定资源文件路径
-            # 如果是打包后的 exe，资源在 _MEIPASS 中
-            # 如果是开发环境，资源在项目目录中
-            if hasattr(sys, '_MEIPASS'):
-                # 打包环境：资源在 _MEIPASS 目录
-                resource_dir = Path(sys._MEIPASS)
-            else:
-                # 开发环境：资源在 sms_app 父目录
-                resource_dir = Path(__file__).parent.parent.parent
-            
-            template_path = resource_dir / "template.xlsx"
-            
-            self.console.log_info(f"[下载模板] 查找模板文件: {template_path}", "#8abaff")
-            
-            if not template_path.exists():
-                self.console.log_warning(f"找不到模板文件: {template_path}")
-                return
-            
+            # 改用動態產生範本，避免二進位檔需要管理
             save_path, _ = QFileDialog.getSaveFileName(
                 None,
                 "保存模板",
                 "template.xlsx",
                 "Excel Files (*.xlsx)"
             )
-            
+
             if save_path:
                 try:
-                    import shutil
-                    shutil.copy(str(template_path), save_path)
-                    self.console.log_success(f"[下载模板] 模板已保存到: {save_path}")
+                    from openpyxl import Workbook
+
+                    wb = Workbook()
+                    ws = wb.active
+
+                    # 第1、2 行保留給日期與活動代碼（對應現有上傳程式）
+                    ws.cell(row=1, column=1, value='date')
+                    ws.cell(row=1, column=2, value='2026-01-01')
+                    ws.cell(row=2, column=1, value='activity_code')
+                    ws.cell(row=2, column=2, value='ACA CMO207')
+
+                    # 第4行為表頭：name, class, studentId, category, award, english_name
+                    headers = ['name', 'class', 'studentId', 'category', 'award', 'english_name']
+                    for i, h in enumerate(headers, start=1):
+                        ws.cell(row=4, column=i, value=h)
+
+                    # 寫入範例一列（空白為可編輯）
+                    ws.cell(row=5, column=1, value='張三')
+                    ws.cell(row=5, column=2, value='J1A')
+                    ws.cell(row=5, column=3, value='26001')
+                    ws.cell(row=5, column=4, value='校外学艺')
+                    ws.cell(row=5, column=5, value='優異')
+                    ws.cell(row=5, column=6, value='ZHANG SAN')
+
+                    wb.save(save_path)
+                    wb.close()
+
+                    self.console.log_success(f"[下载模板] 模板已生成并保存到: {save_path}")
                 except Exception as e:
-                    self.console.log_error(f"[下载模板] 保存失败: {str(e)}")
+                    self.console.log_error(f"[下载模板] 生成模板失败: {str(e)}")
         except Exception as e:
             self.console.log_error(f"[下载模板] 异常: {str(e)}")
     

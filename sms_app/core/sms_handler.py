@@ -849,7 +849,8 @@ class SMSHandler:
                         name = ws.cell(row=row_idx, column=1).value
                         class_name = ws.cell(row=row_idx, column=2).value
                         student_id = ws.cell(row=row_idx, column=3).value
-                        award = ws.cell(row=row_idx, column=4).value
+                        category = ws.cell(row=row_idx, column=4).value
+                        award = ws.cell(row=row_idx, column=5).value
                         
                         if not student_id or not class_name:
                             continue
@@ -858,6 +859,7 @@ class SMSHandler:
                             'name': name,
                             'class': class_name,
                             'student_id': str(student_id),
+                            'category': category or '',
                             'remarks': str(award) if award else ''
                         })
                     
@@ -1108,10 +1110,32 @@ class SMSHandler:
             first_class_id = None  # Track first matched student's class_id
             
             log("  === Matching students ===")
+            def _map_category_to_type(cat_value: str) -> str:
+                """將 Excel 的 category 轉換為 type_of_bonus 的值
+
+                目前允許兩種值：
+                - 校外学艺 -> '1'
+                - 特殊表现 -> '2'
+                其他或空值預設為 '1'
+                """
+                try:
+                    if not cat_value:
+                        return '1'
+                    s = str(cat_value).strip()
+                    if '特殊' in s:
+                        return '2'
+                    if '校外' in s:
+                        return '1'
+                    # 預設回傳 '1'
+                    return '1'
+                except Exception:
+                    return '1'
+
             for score_item in scores_data:
                 student_id = score_item['student_id']
                 class_name = score_item.get('class', '')
                 award = score_item.get('remarks', '')
+                category = score_item.get('category', '')
                 
                 log(f"    Matching: {class_name} - {student_id}...")
                 
@@ -1123,7 +1147,7 @@ class SMSHandler:
                         internal_id = sms_student['internal_id']
                         
                         post_data[f'StudentPerformanceM[inputperformance][{internal_id}][class_id]'] = sms_student['class_id']
-                        post_data[f'StudentPerformanceM[inputperformance][{internal_id}][type_of_bonus]'] = '1'
+                        post_data[f'StudentPerformanceM[inputperformance][{internal_id}][type_of_bonus]'] = _map_category_to_type(category)
                         post_data[f'StudentPerformanceM[inputperformance][{internal_id}][mark]'] = '0.00'
                         post_data[f'StudentPerformanceM[inputperformance][{internal_id}][remark]'] = str(award)
                         
